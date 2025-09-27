@@ -1,0 +1,422 @@
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Send, Paperclip, Search, Circle, MessageCircle, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface User {
+  id: string;
+  name: string;
+  role: "NGO" | "Citizen" | "Vet";
+  online: boolean;
+  lastSeen?: Date;
+  avatar: string;
+}
+
+interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: Date;
+  type: "text" | "image" | "file";
+  fileUrl?: string;
+  fileName?: string;
+}
+
+interface Chat {
+  id: string;
+  participants: User[];
+  lastMessage: Message;
+  unreadCount: number;
+}
+
+// Mock data
+const mockUsers: User[] = [
+  {
+    id: "1",
+    name: "Dr. Priya Sharma",
+    role: "Vet",
+    online: true,
+    avatar: "PS"
+  },
+  {
+    id: "2",
+    name: "Paws & Hearts NGO",
+    role: "NGO",
+    online: true,
+    avatar: "PH"
+  },
+  {
+    id: "3",
+    name: "Mumbai Animal Rescue",
+    role: "NGO",
+    online: false,
+    lastSeen: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+    avatar: "MR"
+  },
+  {
+    id: "4",
+    name: "Volunteer Rahul",
+    role: "Citizen",
+    online: true,
+    avatar: "VR"
+  }
+];
+
+const mockMessages: Message[] = [
+  {
+    id: "1",
+    senderId: "2",
+    receiverId: "current-user",
+    content: "Thank you for reporting the injured dog at Bandra. Our team is on the way!",
+    timestamp: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
+    type: "text"
+  },
+  {
+    id: "2",
+    senderId: "current-user",
+    receiverId: "2",
+    content: "The dog seems to have a leg injury. I've attached photos.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 15),
+    type: "text"
+  },
+  {
+    id: "3",
+    senderId: "1",
+    receiverId: "current-user",
+    content: "I've examined the photos. It looks like a minor fracture. We should prioritize this case.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 5),
+    type: "text"
+  }
+];
+
+export default function Chat() {
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const [newMessage, setNewMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const currentUserId = "current-user";
+  
+  // Mock chats data
+  const chats: Chat[] = [
+    {
+      id: "1",
+      participants: [mockUsers[1]], // NGO
+      lastMessage: mockMessages[0],
+      unreadCount: 2
+    },
+    {
+      id: "2", 
+      participants: [mockUsers[0]], // Vet
+      lastMessage: mockMessages[2],
+      unreadCount: 0
+    },
+    {
+      id: "3",
+      participants: [mockUsers[2]], // Another NGO
+      lastMessage: {
+        id: "4",
+        senderId: "3",
+        receiverId: currentUserId,
+        content: "We have space available at our shelter for the rescued puppies.",
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+        type: "text"
+      },
+      unreadCount: 1
+    }
+  ];
+
+  const filteredChats = chats.filter(chat => 
+    chat.participants[0].name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || !selectedChat) return;
+
+    const message: Message = {
+      id: Date.now().toString(),
+      senderId: currentUserId,
+      receiverId: selectedChat,
+      content: newMessage,
+      timestamp: new Date(),
+      type: "text"
+    };
+
+    setMessages([...messages, message]);
+    setNewMessage("");
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatLastSeen = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getRoleColor = (role: User["role"]) => {
+    switch (role) {
+      case "NGO": return "bg-primary text-primary-foreground";
+      case "Vet": return "bg-success text-success-foreground";
+      case "Citizen": return "bg-accent text-accent-foreground";
+    }
+  };
+
+  const selectedChatData = selectedChat ? chats.find(chat => chat.id === selectedChat) : null;
+  const chatMessages = selectedChat ? messages.filter(msg => 
+    (msg.senderId === currentUserId && msg.receiverId === selectedChat) ||
+    (msg.senderId === selectedChat && msg.receiverId === currentUserId)
+  ) : [];
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <section className="py-8 bg-gradient-card border-b">
+        <div className="container">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Messages</h1>
+              <p className="text-muted-foreground">
+                Connect with NGOs, veterinarians, and volunteers for coordinated animal care.
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Badge variant="outline" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                {mockUsers.filter(u => u.online).length} Online
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="container py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[700px]">
+          {/* Chat List Sidebar */}
+          <div className="lg:col-span-1 flex flex-col">
+            <Card className="flex-1 flex flex-col">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg">Conversations</CardTitle>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <Input
+                    placeholder="Search conversations..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 p-0">
+                <ScrollArea className="h-full">
+                  <div className="space-y-1 p-4 pt-0">
+                    {filteredChats.map((chat) => {
+                      const participant = chat.participants[0];
+                      const isSelected = selectedChat === chat.id;
+                      
+                      return (
+                        <div
+                          key={chat.id}
+                          onClick={() => setSelectedChat(chat.id)}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors",
+                            isSelected 
+                              ? "bg-primary text-primary-foreground" 
+                              : "hover:bg-secondary"
+                          )}
+                        >
+                          <div className="relative">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className={cn(
+                                isSelected ? "bg-primary-foreground text-primary" : getRoleColor(participant.role)
+                              )}>
+                                {participant.avatar}
+                              </AvatarFallback>
+                            </Avatar>
+                            <Circle 
+                              className={cn(
+                                "absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-background rounded-full",
+                                participant.online ? "fill-green-500 text-green-500" : "fill-gray-400 text-gray-400"
+                              )} 
+                            />
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <p className={cn(
+                                "font-medium text-sm truncate",
+                                isSelected ? "text-primary-foreground" : "text-foreground"
+                              )}>
+                                {participant.name}
+                              </p>
+                              {chat.unreadCount > 0 && (
+                                <Badge 
+                                  variant="destructive" 
+                                  className="h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                                >
+                                  {chat.unreadCount}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <p className={cn(
+                                "text-xs truncate",
+                                isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                              )}>
+                                {chat.lastMessage.content}
+                              </p>
+                              <p className={cn(
+                                "text-xs",
+                                isSelected ? "text-primary-foreground/60" : "text-muted-foreground"
+                              )}>
+                                {formatTime(chat.lastMessage.timestamp)}
+                              </p>
+                            </div>
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-xs mt-1",
+                                isSelected ? "border-primary-foreground/20 text-primary-foreground/80" : ""
+                              )}
+                            >
+                              {participant.role}
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Chat Area */}
+          <div className="lg:col-span-3 flex flex-col">
+            {selectedChatData ? (
+              <Card className="flex-1 flex flex-col">
+                {/* Chat Header */}
+                <CardHeader className="pb-4 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className={getRoleColor(selectedChatData.participants[0].role)}>
+                          {selectedChatData.participants[0].avatar}
+                        </AvatarFallback>
+                      </Avatar>
+                      <Circle 
+                        className={cn(
+                          "absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-background rounded-full",
+                          selectedChatData.participants[0].online ? "fill-green-500 text-green-500" : "fill-gray-400 text-gray-400"
+                        )} 
+                      />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{selectedChatData.participants[0].name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedChatData.participants[0].online 
+                          ? "Online" 
+                          : `Last seen ${formatLastSeen(selectedChatData.participants[0].lastSeen!)}`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                {/* Messages */}
+                <CardContent className="flex-1 flex flex-col p-0">
+                  <ScrollArea className="flex-1 p-4">
+                    <div className="space-y-4">
+                      {chatMessages.map((message) => {
+                        const isOwnMessage = message.senderId === currentUserId;
+                        return (
+                          <div key={message.id} className={cn(
+                            "flex",
+                            isOwnMessage ? "justify-end" : "justify-start"
+                          )}>
+                            <div className={cn(
+                              "max-w-[70%] px-4 py-2 rounded-lg",
+                              isOwnMessage 
+                                ? "bg-primary text-primary-foreground" 
+                                : "bg-secondary text-secondary-foreground"
+                            )}>
+                              <p className="text-sm">{message.content}</p>
+                              <p className={cn(
+                                "text-xs mt-1",
+                                isOwnMessage 
+                                  ? "text-primary-foreground/70" 
+                                  : "text-muted-foreground"
+                              )}>
+                                {formatTime(message.timestamp)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  </ScrollArea>
+
+                  {/* Message Input */}
+                  <div className="p-4 border-t">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="icon">
+                        <Paperclip className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        placeholder="Type your message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                        className="flex-1"
+                      />
+                      <Button onClick={handleSendMessage} disabled={!newMessage.trim()}>
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="flex-1 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <MessageCircle className="h-16 w-16 text-muted-foreground mx-auto" />
+                  <div>
+                    <h3 className="text-lg font-semibold">Select a conversation</h3>
+                    <p className="text-muted-foreground">
+                      Choose a conversation from the sidebar to start messaging
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
