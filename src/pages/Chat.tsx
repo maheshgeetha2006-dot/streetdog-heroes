@@ -6,11 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Send, Paperclip, Search, Circle, MessageCircle, Users, Bot } from "lucide-react";
+import { Send, Paperclip, Search, Circle, MessageCircle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import io from 'socket.io-client';
 
 interface User {
   id: string;
@@ -30,7 +27,6 @@ interface Message {
   type: "text" | "image" | "file";
   fileUrl?: string;
   fileName?: string;
-  isAI?: boolean;
 }
 
 interface Chat {
@@ -40,21 +36,21 @@ interface Chat {
   unreadCount: number;
 }
 
-// Available users to chat with
-const availableUsers: User[] = [
+// Mock data
+const mockUsers: User[] = [
   {
     id: "1",
-    name: "Paws & Hearts NGO",
-    role: "NGO",
-    online: true,
-    avatar: "PH"
-  },
-  {
-    id: "2",
     name: "Dr. Priya Sharma",
     role: "Vet",
     online: true,
     avatar: "PS"
+  },
+  {
+    id: "2",
+    name: "Paws & Hearts NGO",
+    role: "NGO",
+    online: true,
+    avatar: "PH"
   },
   {
     id: "3",
@@ -73,52 +69,61 @@ const availableUsers: User[] = [
   }
 ];
 
+const mockMessages: Message[] = [
+  {
+    id: "1",
+    senderId: "2",
+    receiverId: "current-user",
+    content: "Thank you for reporting the injured dog at Bandra. Our team is on the way!",
+    timestamp: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
+    type: "text"
+  },
+  {
+    id: "2",
+    senderId: "current-user",
+    receiverId: "2",
+    content: "The dog seems to have a leg injury. I've attached photos.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 15),
+    type: "text"
+  },
+  {
+    id: "3",
+    senderId: "1",
+    receiverId: "current-user",
+    content: "I've examined the photos. It looks like a minor fracture. We should prioritize this case.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 5),
+    type: "text"
+  }
+];
+
 export default function Chat() {
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(mockMessages);
   const [newMessage, setNewMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [socket, setSocket] = useState<any>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { user, token } = useAuth();
-  const { toast } = useToast();
   
-  const currentUserId = user?.id || "current-user";
-
+  const currentUserId = "current-user";
+  
   // Mock chats data
   const chats: Chat[] = [
     {
       id: "1",
-      participants: [availableUsers[0]], // NGO
-      lastMessage: {
-        id: "1",
-        senderId: "1",
-        receiverId: currentUserId,
-        content: "Thank you for reporting the injured dog at Bandra. Our team is on the way!",
-        timestamp: new Date(Date.now() - 1000 * 60 * 10),
-        type: "text"
-      },
+      participants: [mockUsers[1]], // NGO
+      lastMessage: mockMessages[0],
       unreadCount: 2
     },
     {
       id: "2", 
-      participants: [availableUsers[1]], // Vet
-      lastMessage: {
-        id: "2",
-        senderId: "2",
-        receiverId: currentUserId,
-        content: "I've examined the photos. It looks like a minor fracture. We should prioritize this case.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 5),
-        type: "text"
-      },
+      participants: [mockUsers[0]], // Vet
+      lastMessage: mockMessages[2],
       unreadCount: 0
     },
     {
       id: "3",
-      participants: [availableUsers[2]], // Another NGO
+      participants: [mockUsers[2]], // Another NGO
       lastMessage: {
-        id: "3",
+        id: "4",
         senderId: "3",
         receiverId: currentUserId,
         content: "We have space available at our shelter for the rescued puppies.",
@@ -133,86 +138,6 @@ export default function Chat() {
     chat.participants[0].name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Socket.IO connection
-  useEffect(() => {
-    if (!token) return;
-
-    const socketInstance = io('http://localhost:5000');
-    setSocket(socketInstance);
-
-    socketInstance.on('connect', () => {
-      setIsConnected(true);
-      console.log('Connected to chat server');
-    });
-
-    socketInstance.on('disconnect', () => {
-      setIsConnected(false);
-      console.log('Disconnected from chat server');
-    });
-
-    socketInstance.on('newMessage', (message: any) => {
-      // Convert timestamp string to Date object
-      const messageWithDate = {
-        ...message,
-        timestamp: new Date(message.timestamp)
-      };
-      setMessages(prev => [...prev, messageWithDate]);
-      
-      // Show toast for AI responses
-      if (message.isAI) {
-        toast({
-          title: "AI Assistant Reply",
-          description: "New response received",
-          duration: 3000,
-        });
-      }
-    });
-
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, [token, toast]);
-
-  // Load messages when chat is selected
-  useEffect(() => {
-    if (selectedChat && token) {
-      const userIdNum = parseInt(currentUserId) || 999;
-      const chatIdNum = parseInt(selectedChat);
-      const chatId = `chat-${Math.min(userIdNum, chatIdNum)}-${Math.max(userIdNum, chatIdNum)}`;
-      
-      fetch(`http://localhost:5000/api/messages/${chatId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      .then(res => res.json())
-      .then(data => {
-        // Convert timestamp strings to Date objects
-        const messagesWithDates = data.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        }));
-        setMessages(messagesWithDates);
-        
-        // Join chat room
-        if (socket) {
-          socket.emit('joinChat', chatId);
-        }
-      })
-      .catch(err => {
-        console.error('Failed to load messages:', err);
-        // Initialize with empty messages if fetch fails
-        setMessages([]);
-        if (socket) {
-          const userIdNum = parseInt(currentUserId) || 999;
-          const chatIdNum = parseInt(selectedChat);
-          const chatId = `chat-${Math.min(userIdNum, chatIdNum)}-${Math.max(userIdNum, chatIdNum)}`;
-          socket.emit('joinChat', chatId);
-        }
-      });
-    }
-  }, [selectedChat, token, socket, currentUserId]);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -221,40 +146,20 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !token) return;
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || !selectedChat) return;
 
-    try {
-      const response = await fetch('http://localhost:5000/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          receiverId: selectedChat,
-          content: newMessage,
-          type: 'text'
-        })
-      });
+    const message: Message = {
+      id: Date.now().toString(),
+      senderId: currentUserId,
+      receiverId: selectedChat,
+      content: newMessage,
+      timestamp: new Date(),
+      type: "text"
+    };
 
-      if (response.ok) {
-        setNewMessage("");
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to send message",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive"
-      });
-    }
+    setMessages([...messages, message]);
+    setNewMessage("");
   };
 
   const formatTime = (date: Date) => {
@@ -276,7 +181,7 @@ export default function Chat() {
   const getRoleColor = (role: User["role"]) => {
     switch (role) {
       case "NGO": return "bg-primary text-primary-foreground";
-      case "Vet": return "bg-green-600 text-white";
+      case "Vet": return "bg-success text-success-foreground";
       case "Citizen": return "bg-accent text-accent-foreground";
     }
   };
@@ -286,20 +191,6 @@ export default function Chat() {
     (msg.senderId === currentUserId && msg.receiverId === selectedChat) ||
     (msg.senderId === selectedChat && msg.receiverId === currentUserId)
   ) : [];
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-8 text-center">
-          <MessageCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Please Login</h3>
-          <p className="text-muted-foreground">
-            You need to be logged in to access the chat feature
-          </p>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -316,11 +207,7 @@ export default function Chat() {
             <div className="flex items-center gap-4">
               <Badge variant="outline" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                {availableUsers.filter(u => u.online).length} Online
-              </Badge>
-              <Badge variant={isConnected ? "default" : "destructive"} className="flex items-center gap-2">
-                <Circle className={cn("h-2 w-2", isConnected ? "fill-green-500" : "fill-red-500")} />
-                {isConnected ? "Connected" : "Disconnected"}
+                {mockUsers.filter(u => u.online).length} Online
               </Badge>
             </div>
           </div>
@@ -475,33 +362,17 @@ export default function Chat() {
                               "max-w-[70%] px-4 py-2 rounded-lg",
                               isOwnMessage 
                                 ? "bg-primary text-primary-foreground" 
-                                : message.isAI 
-                                  ? "bg-accent text-accent-foreground border border-accent-foreground/20"
-                                  : "bg-secondary text-secondary-foreground"
+                                : "bg-secondary text-secondary-foreground"
                             )}>
-                              <div className="flex items-start gap-2">
-                                {message.isAI && (
-                                  <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                )}
-                                <div className="flex-1">
-                                  <p className="text-sm">{message.content}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <p className={cn(
-                                      "text-xs",
-                                      isOwnMessage 
-                                        ? "text-primary-foreground/70" 
-                                        : "text-muted-foreground"
-                                    )}>
-                                      {formatTime(message.timestamp)}
-                                    </p>
-                                    {message.isAI && (
-                                      <Badge variant="outline" className="text-xs px-1 py-0">
-                                        AI
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
+                              <p className="text-sm">{message.content}</p>
+                              <p className={cn(
+                                "text-xs mt-1",
+                                isOwnMessage 
+                                  ? "text-primary-foreground/70" 
+                                  : "text-muted-foreground"
+                              )}>
+                                {formatTime(message.timestamp)}
+                              </p>
                             </div>
                           </div>
                         );
