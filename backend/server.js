@@ -549,8 +549,111 @@ app.post('/api/messages', authenticateToken, (req, res) => {
   // Emit to socket room
   io.to(chatId).emit('newMessage', newMessage);
   
+  // Generate AI response for NGO/Vet users
+  const receiver = users.find(u => u.id === receiverId);
+  if (receiver && (receiver.role === 'NGO' || receiver.role === 'Vet')) {
+    setTimeout(() => {
+      const aiResponse = generateAIResponse(content, receiver.role, req.user);
+      const aiMessage = {
+        id: (messages.length + 1).toString(),
+        senderId: receiverId,
+        receiverId: req.user.userId,
+        content: aiResponse,
+        timestamp: new Date(),
+        type: 'text',
+        chatId,
+        isAI: true
+      };
+      
+      messages.push(aiMessage);
+      io.to(chatId).emit('newMessage', aiMessage);
+    }, 1500 + Math.random() * 2000); // Random delay 1.5-3.5 seconds
+  }
+  
   res.status(201).json(newMessage);
 });
+
+// AI Response Generator
+function generateAIResponse(userMessage, receiverRole, sender) {
+  const lowerMsg = userMessage.toLowerCase();
+  
+  const ngoResponses = {
+    greeting: [
+      "Hello! Thank you for reaching out to us. How can we help you with animal welfare today?",
+      "Hi there! We're glad you contacted us. What animal welfare matter can we assist you with?",
+      "Greetings! Our team is here to help. What's the situation you'd like to report or discuss?"
+    ],
+    injury: [
+      "Thank you for reporting this injured animal. Can you please share the exact location? Our rescue team will be dispatched immediately.",
+      "We take animal injuries very seriously. Please provide GPS coordinates if possible, and we'll send our emergency response team.",
+      "This sounds urgent. Our rescue volunteers are on standby. Can you provide more details about the animal's condition and location?"
+    ],
+    adoption: [
+      "We're happy to help you with adoption! Please visit our adoption center or check our available pets online. Do you have any specific preferences?",
+      "Thank you for considering adoption! We have many wonderful animals looking for homes. What type of animal are you interested in?",
+      "Adoption is a great way to help! We'd love to match you with the perfect companion. When would you like to visit our shelter?"
+    ],
+    feeding: [
+      "Community feeding is wonderful! We can provide information about our feeding programs and safe feeding practices. Are you looking to start a feeding program?",
+      "Thank you for caring about street animals! We support feeding initiatives. Would you like guidance on nutritious feeding or volunteer coordination?",
+      "Feeding programs make a huge difference! We can connect you with local feeding groups or provide feeding supplies. What area are you focusing on?"
+    ],
+    default: [
+      "Thank you for contacting us. Our team is dedicated to animal welfare. Can you provide more details about how we can assist you?",
+      "We appreciate you reaching out. Every animal welfare concern matters to us. Please share more information about the situation.",
+      "Hello! We're here to help with any animal-related concerns. What specific assistance do you need from our NGO?"
+    ]
+  };
+
+  const vetResponses = {
+    greeting: [
+      "Hello! Dr. here. How can I help you with animal health concerns today?",
+      "Hi! Thank you for reaching out. What animal health issue would you like to discuss?",
+      "Greetings! As a veterinarian, I'm here to help with any animal health questions or emergencies."
+    ],
+    injury: [
+      "Based on your description, this sounds like it needs immediate attention. Can you safely transport the animal to our clinic? If not, we can arrange emergency pickup.",
+      "This injury requires proper medical evaluation. Please bring the animal to our clinic immediately, or if you can't transport safely, describe the injury in more detail.",
+      "Thank you for caring about this injured animal. From your description, I recommend immediate medical attention. Can you provide photos of the injury?"
+    ],
+    health: [
+      "For health concerns, I'd recommend a thorough examination. Can you describe the symptoms in more detail? When did you first notice these signs?",
+      "Animal health issues should be addressed promptly. Can you tell me more about the symptoms, duration, and the animal's current condition?",
+      "I'd be happy to help assess the situation. Please provide more details about the animal's behavior, appetite, and any visible symptoms."
+    ],
+    vaccination: [
+      "Vaccination is crucial for animal health. We offer comprehensive vaccination programs. Would you like to schedule an appointment or learn about our vaccination drives?",
+      "Thank you for prioritizing animal health! We conduct regular vaccination camps. Are you interested in vaccinating street animals or pets?",
+      "Vaccinations save lives! We provide both individual consultations and community vaccination programs. What type of vaccination are you inquiring about?"
+    ],
+    default: [
+      "As a veterinarian, I'm here to help with any animal health concerns. Can you provide more specific details about the situation?",
+      "Thank you for reaching out. Every animal's health matters. Please describe the medical concern you'd like to discuss.",
+      "Hello! I'm available to provide veterinary guidance. What animal health issue can I help you with today?"
+    ]
+  };
+
+  const responses = receiverRole === 'NGO' ? ngoResponses : vetResponses;
+  
+  let responseCategory = 'default';
+  
+  if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey')) {
+    responseCategory = 'greeting';
+  } else if (lowerMsg.includes('injur') || lowerMsg.includes('hurt') || lowerMsg.includes('wound') || lowerMsg.includes('bleed') || lowerMsg.includes('accident')) {
+    responseCategory = 'injury';
+  } else if (lowerMsg.includes('adopt') || lowerMsg.includes('home') || lowerMsg.includes('family')) {
+    responseCategory = 'adoption';
+  } else if (lowerMsg.includes('feed') || lowerMsg.includes('food') || lowerMsg.includes('hungry') || lowerMsg.includes('starv')) {
+    responseCategory = 'feeding';
+  } else if (lowerMsg.includes('health') || lowerMsg.includes('sick') || lowerMsg.includes('symptom')) {
+    responseCategory = 'health';
+  } else if (lowerMsg.includes('vaccin') || lowerMsg.includes('shot') || lowerMsg.includes('immuniz')) {
+    responseCategory = 'vaccination';
+  }
+  
+  const categoryResponses = responses[responseCategory] || responses.default;
+  return categoryResponses[Math.floor(Math.random() * categoryResponses.length)];
+}
 
 // Socket.IO for real-time chat
 io.on('connection', (socket) => {
