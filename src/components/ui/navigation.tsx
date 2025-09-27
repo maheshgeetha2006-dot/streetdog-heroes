@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Heart, Map, MessageCircle, FileText, User, Menu, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Heart, Map, MessageCircle, FileText, User, Menu, X, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { LoginDialog } from "@/components/auth/LoginDialog";
 
 export function Navigation() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
+  const { user, login, logout, isAuthenticated } = useAuth();
 
   const navigation = [
     { name: "Home", href: "/", icon: Heart },
@@ -47,10 +52,27 @@ export function Navigation() {
               </Link>
             );
           })}
-          <Button variant="outline" size="sm">
-            <User className="h-4 w-4 mr-2" />
-            Login
-          </Button>
+          
+          {isAuthenticated ? (
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{user?.name}</span>
+                <Badge variant="outline" className="text-xs">
+                  {user?.role}
+                </Badge>
+              </div>
+              <Button variant="outline" size="sm" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setIsLoginDialogOpen(true)}>
+              <User className="h-4 w-4 mr-2" />
+              Login
+            </Button>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -88,13 +110,47 @@ export function Navigation() {
                 </Link>
               );
             })}
-            <Button variant="outline" className="w-full justify-start" size="sm">
-              <User className="h-4 w-4 mr-2" />
-              Login
-            </Button>
+            {isAuthenticated ? (
+              <>
+                <div className="px-4 py-3 border-t">
+                  <div className="flex items-center space-x-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">{user?.name}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {user?.role}
+                    </Badge>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start" 
+                  size="sm"
+                  onClick={logout}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <Button 
+                variant="outline" 
+                className="w-full justify-start" 
+                size="sm"
+                onClick={() => setIsLoginDialogOpen(true)}
+              >
+                <User className="h-4 w-4 mr-2" />
+                Login
+              </Button>
+            )}
           </div>
         </div>
       )}
+      
+      <LoginDialog 
+        open={isLoginDialogOpen} 
+        onOpenChange={setIsLoginDialogOpen}
+        onLoginSuccess={login}
+      />
     </nav>
   );
 }
